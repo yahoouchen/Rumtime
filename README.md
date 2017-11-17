@@ -1,27 +1,45 @@
-# Rumtime
+# 什么是Rumtime
 
-Rumtime
-什么是Rumtime
-我们写的代码在程序运行过程中都会被转化成runtime的C代码执行，例如[target doSomething];会被转化成objc_msgSend(target, @selector(doSomething));。 OC中一切都被设计成了对象，我们都知道一个类被初始化成一个实例，这个实例是一个对象。实际上一个类本质上也是一个对象，在runtime中用结构体表示。
+  我们写的代码在程序运行过程中都会被转化成runtime的C代码执行，例如[target doSomething];会被转化成objc_msgSend(target, @selector(doSomething));。 OC中一切都被设计成了对象，我们都知道一个类被初始化成一个实例，这个实例是一个对象。实际上一个类本质上也是一个对象，在runtime中用结构体表示。
+
 Runtime的一切都围绕两个中心：类的动态配置 和 消息传递。
-Rumtime 常用场景
+
+# Rumtime 常用场景
+
 运行时修改内存中的数据
+
 动态的在内存中创建一个类
+
 给类增加一个属性
+
 给类增加一个协议实现
+
 给类增加一个方法实现IMP
+
 遍历一个类的所有成员变量、属性和方法等
-具体应用
+
+# 具体应用
+
 拦截系统自带的方法调用（Method Swizzling黑魔法）
+
 将某些OC代码转化为Runtime代码，探究底层。如block的实现原理
+
 实现给分类增加属性
+
 实现NSCoding的自动归档和接档
+
 实现字典的模型和自动转换
+
 JSPatch替换已有的OC方法实行等
-具体实现
-首先，在需要调用Runtime相关方法和参数的地方添加头文件<objc/runtime.h>
+
+# 具体实现
+
+ 首先，在需要调用Runtime相关方法和参数的地方添加头文件<objc/runtime.h>
+ 
 /这里用新建Person类进行举列分析/
+
 Person.h
+```
 #import <Foundation/Foundation.h>
 
 @interface Person : NSObject
@@ -32,7 +50,11 @@ Person.h
 - (void) func1;
 - (void) func2;
 @end
+
+```
 Person.m
+
+```
 #import "Person.h"
 #import <objc/objc-runtime.h>
 
@@ -62,14 +84,10 @@ Person.m
     return [NSString stringWithFormat:@"name=%@,age=%ld",self.name,(long)self.age];
 }
 @end
+```
 
-//获取列表
-//方法调用
-//拦截调用
-//动态添加方法
-//关联对象
-//方法交换
-1.获取person类的所有变量
+## 1.获取person类的所有变量
+```
 - (void)getAllVariable{
    unsigned int count = 0;
    //获取类的一个包含所有变量的列表，IVar是runtime声明的一个宏，是实例变量的意思.
@@ -84,11 +102,13 @@ Person.m
    }
    
 }
-2.获取person类的所有方法
+```
+## 2.获取person类的所有方法
 SEL：数据类型，表示方法选择器，可以理解为对方法的一种包装。在每个方法都有一个与之对应的SEL类型的数据，根据一个SEL数据“@selector(方法名)”就可以找到对应的方法地址，进而调用方法。 因此可以通过：获取 Method结构体->得到SEL选择器名称->得到对应的方法名 ，这样的方式，便于认识OC中关于方法的定义。
-- (void) getAllMethod{
+
+```- (void) getAllMethod{
     unsigned int count;
-    //获取方法列表，所有在.m文件显式实现的方法都会被找到，包括setter+getter方法；
+    /获取方法列表，所有在.m文件显式实现的方法都会被找到，包括setter+getter方法；
     Method *allMethods = class_copyMethodList([Person class], &count);
     for(int i =0;i<count;i++)
     {
@@ -100,7 +120,10 @@ SEL：数据类型，表示方法选择器，可以理解为对方法的一种�
         const char *methodname = sel_getName(sel); NSLog(@"(Method:%s)",methodname);
     }
 }
-3.改变person类的私有变量name的值
+```
+
+## 3.改变person类的私有变量name的值
+```
 //3.改变person的name的变量属性
 - (void)changeVariable{
     NSLog(@"改变前的person：%@",per.name);
@@ -108,16 +131,21 @@ SEL：数据类型，表示方法选择器，可以理解为对方法的一种�
     Ivar *allList = class_copyIvarList([Person class], &count);
     Ivar ivv = allList[0]; //从第一个例子getAllVariable中输出的控制台信息，我们可以看到name为第一个实例属性。
     object_setIvar(per, ivv, @"Mike"); //name属性Tom被强制改为Mike。
-    
     NSLog(@"改变之后的person：%@",per.name);
- 
 }
-4.为person的category类增加一个新属性
+```
+
+## 4.为person的category类增加一个新属性
+
 如何在不改动某个类的前提下，添加一个新的属性呢？ 答：可以利用runtime为分类添加新属性。 在iOS中，category，也就是分类，是不可以为本类添加新的属性的，但是在runtime中我们可以使用对象关联，为person类进行分类的新属性创建：
-使用场景：
+
+####使用场景：
 假设imageCategory是UIImage类的分类，在实际开发中，我们使用UIImage下载图片或者操作过程需要增加一个URL保存一段地址，以备后期使用。这时可以尝试在分类中动态添加新属性MyURL进行存储。
+
 首先新建一个类继承Person 命名PersonCategory
+
 在出现的新类“person+PersonCategory.h”中，添加“height”：
+```
 #import "Person+PersonCategory.h"
 #import <objc/objc-runtime.h>
 const char *str = "mykey";//做为key，字符常量 必须是C语言字符串
@@ -144,15 +172,20 @@ const char *str = "mykey";//做为key，字符常量 必须是C语言字符串
 }
 
 @end
+```
+
 接下来，我们可以在ViewController.m中对person的一个对象进行height的访问了，
-//4.添加的新属性
+
+```//4.添加的新属性
 - (void)addVariable
 {
     per.height = 12; //给新属性赋值
     NSLog(@"%f",[per height]);  //输出新属性的值
 }
-/
-5.为person类添加一个新方法
+```
+
+## 5.为person类添加一个新方法
+```
 //5.为person类添加一个新方法
 - (void)addMethod{
     /* 动态添加方法：
@@ -175,8 +208,10 @@ const char *str = "mykey";//做为key，字符常量 必须是C语言字符串
     NSLog(@"已新增方法:NewMethod");
     return 1;
 }
-6.交换person类的二个方法功能
-交换方法的使用场景：项目中的某个功能，在项目中需要多次被引用，当项目的需求发生改变时，要使用另一种功能代替这个功能，且要求不改变旧的项目(也就是不改变原来方法实现的前提下)。那么，我们可以在分类中，再写一个新的方法(符合新的需求的方法)，然后交换两个方法的实现。这样，在不改变项目的代码，而只是增加了新的代码的情况下，就完成了项目的改进，很好地体现了该项目的封装性与利用率。 注：交换两个方法的实现一般写在类的load方法里面，因为load方法会在程序运行前加载一次。
+```
+## 6.交换person类的二个方法功能
+ 交换方法的使用场景：项目中的某个功能，在项目中需要多次被引用，当项目的需求发生改变时，要使用另一种功能代替这个功能，且要求不改变旧的项目(也就是不改变原来方法实现的前提下)。那么，我们可以在分类中，再写一个新的方法(符合新的需求的方法)，然后交换两个方法的实现。这样，在不改变项目的代码，而只是增加了新的代码的情况下，就完成了项目的改进，很好地体现了该项目的封装性与利用率。 注：交换两个方法的实现一般写在类的load方法里面，因为load方法会在程序运行前加载一次。
+```
 //6.交互person类的2个方法功能
 - (void) replaceMethod{
     Method method1 = class_getInstanceMethod([Person class], @selector(func1));
@@ -186,3 +221,4 @@ const char *str = "mykey";//做为key，字符常量 必须是C语言字符串
     method_exchangeImplementations(method1, method2);
     [per func1]; //输出交换后的效果，需要对比的可以尝试下交换前运行func1；
 }
+```
